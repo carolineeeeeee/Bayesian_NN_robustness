@@ -49,7 +49,7 @@ import pickle
 #num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
 # code credit: https://medium.com/python-experiments/bayesian-cnn-model-on-mnist-data-using-tensorflow-probability-compared-to-cnn-82d56a298f45
-def train_bcnn(mnist_conv, learning_rate=0.001, max_step=1000, batch_size=50, load=False, load_name='', save=False, save_name='', model='orig', sigma=0.1, min_noise=0, max_noise=1):
+def train_bcnn(mnist_conv, learning_rate=0.001, max_step=5000, batch_size=50, load=False, load_name='', save=False, save_name='', model='orig', sigma=0.1, min_noise=0, max_noise=1):
 	if load and load_name=='':
 		print("missing load_name")
 		exit()
