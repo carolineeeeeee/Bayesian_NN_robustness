@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from skimage.color import gray2rgb, rgb2gray, label2rgb # since the code wants color images
 from sklearn.datasets import fetch_openml
-
+import sklearn
 
 import os,sys
 try:
@@ -49,7 +49,7 @@ import pickle
 #num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
 # code credit: https://medium.com/python-experiments/bayesian-cnn-model-on-mnist-data-using-tensorflow-probability-compared-to-cnn-82d56a298f45
-def train_bcnn(mnist_conv, learning_rate=0.001, max_step=5000, batch_size=50, load=False, load_name='', save=False, save_name='', model='orig', sigma=0.1, minimum=0, maximum=1):
+def train_bcnn(mnist_conv, learning_rate=0.001, max_step=1000, batch_size=50, load=False, load_name='', save=False, save_name='', model='orig', sigma=0.1, minimum=0, maximum=1):
 	if load and load_name=='':
 		print("missing load_name")
 		exit()
@@ -353,7 +353,6 @@ def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, mi
 
 		def predict_wrap(x):
 			test_images = rgb2gray(x)
-
 			if x.ndim == 3:
 				test_images = test_images.reshape(1, 28, 28, 1)
 			else:
@@ -399,7 +398,91 @@ def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, mi
 		return 0
 
 
-def find_noisy_accuracy(img, step=0.1): 
+def find_accuracy(load_name, validation_set, learning_rate=0.001, model='orig', sigma=0.1, minimum=0, maximum=1): 
+	#print(validation_set.shape)
+			# defining the model
+	images = tf.compat.v1.placeholder(tf.float32,shape=[None,28,28,1])
+	labels = tf.compat.v1.placeholder(tf.float32,shape=[None,])
+	hold_prob = tf.compat.v1.placeholder(tf.float32)
+	if model == 'orig':
+		neural_net = tf.keras.Sequential([
+			tfp.layers.Convolution2DReparameterization(32, kernel_size=5,  padding="SAME", activation=tf.nn.relu),
+			tf.keras.layers.MaxPooling2D(pool_size=[2, 2],  strides=[2, 2],  padding="SAME"),
+			tfp.layers.Convolution2DReparameterization(64, kernel_size=5,  padding="SAME",  activation=tf.nn.relu),
+			tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+			tf.keras.layers.Flatten(),
+			tfp.layers.DenseFlipout(1024, activation=tf.nn.relu),
+			tf.keras.layers.Dropout(hold_prob),
+			tfp.layers.DenseFlipout(10)])
+	elif model == 'gaussian':
+		neural_net = tf.keras.Sequential([
+			tf.keras.layers.GaussianNoise(sigma),
+			tfp.layers.Convolution2DReparameterization(32, kernel_size=5,  padding="SAME", activation=tf.nn.relu),
+			tf.keras.layers.MaxPooling2D(pool_size=[2, 2],  strides=[2, 2],  padding="SAME"),
+			tfp.layers.Convolution2DReparameterization(64, kernel_size=5,  padding="SAME",  activation=tf.nn.relu),
+			tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+			tf.keras.layers.Flatten(),
+			tfp.layers.DenseFlipout(1024, activation=tf.nn.relu),
+			tf.keras.layers.Dropout(hold_prob),
+			tfp.layers.DenseFlipout(10)])
+	elif model == 'uniform':
+		neural_net = tf.keras.Sequential([
+		tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, maximum)),
+		tfp.layers.Convolution2DReparameterization(32, kernel_size=5,  padding="SAME", activation=tf.nn.relu),
+		tf.keras.layers.MaxPooling2D(pool_size=[2, 2],  strides=[2, 2],  padding="SAME"),
+		tfp.layers.Convolution2DReparameterization(64, kernel_size=5,  padding="SAME",  activation=tf.nn.relu),
+		tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+		tf.keras.layers.Flatten(),
+		tfp.layers.DenseFlipout(1024, activation=tf.nn.relu),
+		tf.keras.layers.Dropout(hold_prob),
+		tfp.layers.DenseFlipout(10)])
+	logits = neural_net(images)
+	# Compute the -ELBO as the loss, averaged over the batch size.
+	labels_distribution = tfp.distributions.Categorical(logits=logits)
+	neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labels))
+	kl = sum(neural_net.losses) / mnist_conv.train.num_examples
+	elbo_loss = neg_log_likelihood + kl
+	optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
+	train_op = optimizer.minimize(elbo_loss)
+	# Build metrics for evaluation. Predictions are formed from a single forward
+	# pass of the probabilistic layers. They are cheap but noisy predictions.
+	predictions = tf.argmax(logits, axis=1)
+	accuracy, accuracy_update_op = tf.compat.v1.metrics.accuracy(labels=labels, predictions=predictions)
+
+	# training
+	init_op = tf.group(tf.compat.v1.global_variables_initializer(),
+						tf.compat.v1.local_variables_initializer())
+	validation_images = validation_set[0]
+	validation_images = np.asarray(validation_images, dtype=np.float32)
+	validation_labels = validation_set[1]
+	
+	saver = tf.compat.v1.train.Saver()
+	with tf.compat.v1.Session() as sess:
+		sess.run(init_op)
+		saver = tf.compat.v1.train.import_meta_graph(load_name+'.meta')
+		saver.restore(sess, load_name)
+
+		# orig accuracy
+		logits_orig = sess.run(logits, feed_dict={images:validation_images, hold_prob:0.5})
+		predictions_orig = sess.run(tf.argmax(logits_orig, axis=1))
+		accuracy_orig = sklearn.metrics.accuracy_score(validation_labels, predictions_orig)
+		print("accuracy with original images: " + str(accuracy_orig))
+
+		# gaussian accuracy
+		GaussianNoise = tf.keras.layers.GaussianNoise(sigma)
+		noisy_images = sess.run(GaussianNoise(validation_images))
+		logits_gauss = sess.run(logits, feed_dict={images:noisy_images, hold_prob:0.5})
+		predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))		
+		accuracy_gauss = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
+		print("accuracy with gaussian noise: " + str(accuracy_gauss))
+		
+		# uniform accuracy
+		UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, maximum))
+		noisy_images = sess.run(GaussianNoise(validation_images))
+		logits_gauss = sess.run(logits, feed_dict={images:noisy_images, hold_prob:0.5})
+		predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))		
+		accuracy_gauss = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
+		print("accuracy with uniform noise: " + str(accuracy_gauss))
 	return 0
 
 
@@ -424,25 +507,25 @@ if __name__ == '__main__':
 	if train_orig:
 		train_bcnn(mnist_conv, save=False, save_name=orig_model_save, max_step=500)
 		
-		load_and_explain(orig_model_save)
+		#load_and_explain(orig_model_save)
 
 	
-	train_gaussian = True
+	train_gaussian = False
 	gaussian_model_1 = "./saved_models/orig_gaussian_0.1_model.ckpt"
 	if train_gaussian:
 		print("before running gaussian")
 		train_bcnn(mnist_conv, 0.1, load=True, load_name=orig_model_save, save=True, save_name=gaussian_model_1, model='gaussian')
-	load_and_explain(gaussian_model_1, model='gaussian', sigma=0.1)
+	#load_and_explain(gaussian_model_1, model='gaussian', sigma=0.1)
 	
 	train_uniform = False
 	uniform_model_1 = "./saved_models/uniform_0.1_model.ckpt"
 	if train_uniform:
 		print("before running uniform")
 		train_bcnn(mnist_conv, 0, 0.1, save=True, save_name=uniform_model_1, model='uniform')
-		load_and_explain(uniform_model_1, model='uniform', minimum=0, maximum=0.01)
+		#load_and_explain(uniform_model_1, model='uniform', minimum=0, maximum=0.01)
 	#train_bcnn(mnist_conv, max_step=500, load=True, load_name=orig_model_save)
 
-
+	find_accuracy(orig_model_save, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
 
 
 
