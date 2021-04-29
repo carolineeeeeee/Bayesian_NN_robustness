@@ -49,7 +49,7 @@ import pickle
 #num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
 # code credit: https://medium.com/python-experiments/bayesian-cnn-model-on-mnist-data-using-tensorflow-probability-compared-to-cnn-82d56a298f45
-def train_bcnn(mnist_conv, learning_rate=0.001, max_step=1000, batch_size=50, load=False, load_name='', save=False, save_name='', model='orig', sigma=0.1, minimum=0, maximum=1):
+def train_bcnn(mnist_conv, learning_rate=0.001, max_step=1000, batch_size=50, load=False, load_name='', save=False, save_name='', model='orig', sigma=0.1, min_noise=0, max_noise=1):
 	if load and load_name=='':
 		print("missing load_name")
 		exit()
@@ -85,7 +85,7 @@ def train_bcnn(mnist_conv, learning_rate=0.001, max_step=1000, batch_size=50, lo
 			tfp.layers.DenseFlipout(10)])
 	elif model == 'uniform':
 		neural_net = tf.keras.Sequential([
-			tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, maximum)),
+			tf.keras.layers.Lambda(lambda x: x + random.uniform(min_noise, max_noise)),
 			tfp.layers.Convolution2DReparameterization(32, kernel_size=5,  padding="SAME", activation=tf.nn.relu),
 			tf.keras.layers.MaxPooling2D(pool_size=[2, 2],  strides=[2, 2],  padding="SAME"),
 			tfp.layers.Convolution2DReparameterization(64, kernel_size=5,  padding="SAME",  activation=tf.nn.relu),
@@ -510,23 +510,27 @@ if __name__ == '__main__':
 		
 		#load_and_explain(orig_model_save)
 
-	
+	sigmas = [0.001, 0.1, 0.5, 0.9]
 	train_gaussian = False
-	gaussian_model_1 = "./saved_models/orig_gaussian_0.1_model.ckpt"
 	if train_gaussian:
-		print("before running gaussian")
-		train_bcnn(mnist_conv, 0.1, load=True, load_name=orig_model_save, save=True, save_name=gaussian_model_1, model='gaussian')
+		for s in sigmas:
+			gaussian_model_1 = "./saved_models/orig_gaussian_" + str(s) + "_model.ckpt"
+			print("before running gaussian")
+			train_bcnn(mnist_conv, s, save=True, save_name=gaussian_model_1, model='gaussian')
 	#load_and_explain(gaussian_model_1, model='gaussian', sigma=0.1)
 	
-	train_uniform = False
-	uniform_model_1 = "./saved_models/uniform_0.1_model.ckpt"
+	train_uniform = True
+	maximum = [0.001, 0.1, 0.5, 0.9]
+
 	if train_uniform:
-		print("before running uniform")
-		train_bcnn(mnist_conv, 0, 0.1, save=True, save_name=uniform_model_1, model='uniform')
+		for m in maximum:
+			uniform_model_1 = "./saved_models/uniform_" + str(m) +"_model.ckpt"
+			print("before running uniform")
+			train_bcnn(mnist_conv, min_noise=0, max_noise=m, save=True, save_name=uniform_model_1, model='uniform')
 		#load_and_explain(uniform_model_1, model='uniform', minimum=0, maximum=0.01)
 	#train_bcnn(mnist_conv, max_step=500, load=True, load_name=orig_model_save)
 
-	find_accuracy(orig_model_save, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
+	#find_accuracy(orig_model_save, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
 
 
 
