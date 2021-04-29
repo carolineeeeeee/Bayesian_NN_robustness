@@ -370,7 +370,8 @@ def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, mi
 		#print(X_vec[0].shape)
 		#print(noisy.shape)
 		#exit()
-		explanation = explainer.explain_instance(X_vec[0], 
+		image_to_explain = X_vec[0]
+		explanation = explainer.explain_instance(image_to_explain, 
 											 classifier_fn = predict_wrap, 
 											 top_labels=10, hide_color=0, num_samples=10000, segmentation_fn=segmenter)
 		#exit()
@@ -391,7 +392,7 @@ def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, mi
 		fig, m_axs = plt.subplots(2,5, figsize = (12,6))
 		for i, c_ax in enumerate(m_axs.flatten()):
 			temp, mask = explanation.get_image_and_mask(i, positive_only=True, num_features=1000, hide_rest=False, min_weight = 0.001)
-			c_ax.imshow(label2rgb(mask,X_vec[0], bg_label = 0), interpolation = 'nearest')
+			c_ax.imshow(label2rgb(mask,image_to_explain, bg_label = 0), interpolation = 'nearest')
 			c_ax.set_title('Positive for {}\nActual {}'.format(i, y_vec[0]))
 			c_ax.axis('off')
 		plt.savefig('noisy_all_classes.png')
