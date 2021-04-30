@@ -52,12 +52,12 @@ import pickle
 # viz_steps = 500 #frequency at which save visualizations.
 # num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
-sigmas = [0.01, 0.05, 0.1, 0.2, 1, 2, 3]
-maxs = [0.01, 0.05, 0.1, 0.2, 1, 2, 3]
+sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]
+maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
 # code credit: https://medium.com/python-experiments/bayesian-cnn-model-on-mnist-data-using-tensorflow-probability-compared-to-cnn-82d56a298f45
-def train_bcnn(mnist_conv, learning_rate=0.001, max_step=5000, batch_size=50, load=False, load_name='', save=False,
+def train_bcnn(mnist_conv, learning_rate=0.001, max_step=3000, batch_size=50, load=False, load_name='', save=False,
                save_name='', model='orig', sigma=0.1, min_noise=0, max_noise=1):
     if load and load_name == '':
         print("missing load_name")
@@ -123,7 +123,7 @@ def train_bcnn(mnist_conv, learning_rate=0.001, max_step=5000, batch_size=50, lo
 
             _ = sess.run([train_op, accuracy_update_op], feed_dict={
                 images: images_b, labels: labels_b, hold_prob: 0.5})
-            print(step)
+
             if (step == 0) | (step % 500 == 0):
                 images_h, labels_h = mnist_conv.validation.next_batch(
                         mnist_conv.validation.num_examples)
@@ -614,7 +614,7 @@ if __name__ == '__main__':
 
     #train_orig()
 
-    for sigma in sigmas:
+    for sigma in [0.1]:
         train_gaussian(sigma)
 
     for max in maxs:
