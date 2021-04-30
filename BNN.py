@@ -53,7 +53,7 @@ import pickle
 # num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
 sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]
-maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 1]
 
 
 # code credit: https://medium.com/python-experiments/bayesian-cnn-model-on-mnist-data-using-tensorflow-probability-compared-to-cnn-82d56a298f45
@@ -106,16 +106,20 @@ def train_bcnn(mnist_conv, learning_rate=0.001, max_step=3000, batch_size=50, lo
         #define noise
         GaussianNoise = tf.keras.layers.GaussianNoise(sigma)
         UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(min_noise, max_noise))
+        g_noise = np.random.normal(0, sigma, (batch_size, 28, 28, 1))
+        g_noise = g_noise.reshape(batch_size, 28, 28, 1)
+        u_noise = np.random.uniform(low=min_noise, high=max_noise, size=(batch_size, 28, 28, 1))
+        u_noise = u_noise.reshape(batch_size, 28, 28, 1)
         for step in range(max_step + 1):
             images_b, labels_b = mnist_conv.train.next_batch(
                 batch_size)
             #images_h, labels_h = mnist_conv.validation.next_batch(
             #    mnist_conv.validation.num_examples)
             if model == 'gaussian':
-                images_b = sess.run(GaussianNoise(images_b))
+                images_b = images_b+ g_noise
                 #images_h = sess.run(GaussianNoise(images_h))
             elif model == 'uniform':
-                images_b = sess.run(UniformNoise(images_b))
+                images_b = images_b + u_noise
                 #images_h = sess.run(UniformNoise(images_h))
             else:
                 pass
@@ -125,16 +129,9 @@ def train_bcnn(mnist_conv, learning_rate=0.001, max_step=3000, batch_size=50, lo
                 images: images_b, labels: labels_b, hold_prob: 0.5})
 
             if (step == 0) | (step % 500 == 0):
-                images_h, labels_h = mnist_conv.validation.next_batch(
-                        mnist_conv.validation.num_examples)
-                if model == 'gaussian':
-                     images_h = sess.run(GaussianNoise(images_h))
-                elif model == 'uniform':
-                    images_h = sess.run(UniformNoise(images_h))
-                else:
-                    pass
-                loss_value, accuracy_value = sess.run([elbo_loss, accuracy], feed_dict={images: images_h,
-                                                                                        labels: labels_h,
+
+                loss_value, accuracy_value = sess.run([elbo_loss, accuracy], feed_dict={images: images_b,
+                                                                                        labels: labels_b,
                                                                                         hold_prob: 0.5})
 
                 print("Step: {:>3d} Loss: {:.3f} Accuracy: {:.3f}".format(step, loss_value, accuracy_value))
@@ -390,7 +387,7 @@ def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, mi
         return 0
 
 
-def find_accuracy(load_name, validation_set, learning_rate=0.001, model='orig', sigma=0.1, minimum=0, maximum=1):
+def find_accuracy(load_name, validation_set, learning_rate=0.001, minimum=0):
     # print(validation_set.shape)
     # defining the model
     images = tf.compat.v1.placeholder(tf.float32, shape=[None, 28, 28, 1])
@@ -425,37 +422,39 @@ def find_accuracy(load_name, validation_set, learning_rate=0.001, model='orig', 
     validation_images = np.asarray(validation_images, dtype=np.float32)
     validation_labels = validation_set[1]
 
-    saver = tf.compat.v1.train.Saver()
     with tf.compat.v1.Session() as sess:
-        sess.run(init_op)
-        saver = tf.compat.v1.train.import_meta_graph(load_name + '.meta')
-        saver.restore(sess, load_name)
+        with open("{}_test".format(load_name), 'w+') as f:
+            sess.run(init_op)
+            saver = tf.compat.v1.train.import_meta_graph(load_name + '.meta')
+            saver.restore(sess, load_name)
 
-        # orig accuracy
-        logits_orig = sess.run(logits, feed_dict={images: validation_images, hold_prob: 0.5})
-        predictions_orig = sess.run(tf.argmax(logits_orig, axis=1))
-        accuracy_orig = sklearn.metrics.accuracy_score(validation_labels, predictions_orig)
-        print("accuracy with original images: " + str(accuracy_orig))
+            # orig accuracy
+            logits_orig = sess.run(logits, feed_dict={images: validation_images, hold_prob: 0.5})
+            predictions_orig = sess.run(tf.argmax(logits_orig, axis=1))
+            test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_orig)
+            f.write("Accuracy origin: {}\n".format(str(test_accuracy)))
 
-        # gaussian accuracy
-        GaussianNoise = tf.keras.layers.GaussianNoise(0, sigma)
-        noisy_images = sess.run(GaussianNoise(validation_images))
-        logits_gauss = sess.run(logits, feed_dict={images: noisy_images, hold_prob: 0.5})
-        predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
-        accuracy_gauss = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
-        print("accuracy with gaussian noise: " + str(accuracy_gauss))
+            # gaussian accuracy
+            for t_sigma in sigmas:
+                GaussianNoise = tf.keras.layers.GaussianNoise(t_sigma)
+                noisy_images = sess.run(GaussianNoise(validation_images))
+                logits_gauss = sess.run(logits, feed_dict={images: noisy_images, hold_prob: 0.5})
+                predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
+                test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
+                f.write("Accuracy gaussian with sigma {}: {}\n".format(str(t_sigma), str(test_accuracy)))
 
-        # uniform accuracy
-        UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, maximum))
-        noisy_images = sess.run(UniformNoise(validation_images))
-        logits_gauss = sess.run(logits, feed_dict={images: noisy_images, hold_prob: 0.5})
-        predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
-        accuracy_gauss = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
-        print("accuracy with uniform noise: " + str(accuracy_gauss))
+            # uniform accuracy
+            for t_max in maxs:
+                UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, t_max))
+                noisy_images = sess.run(UniformNoise(validation_images))
+                logits_gauss = sess.run(logits, feed_dict={images: noisy_images, hold_prob: 0.5})
+                predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
+                test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
+                f.write("Accuracy uniform with max {}: {}\n".format(str(t_max), str(test_accuracy)))
     return 0
 
 
-def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0,testing_num=1000,
+def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0, testing_num=1000,
                   model_name=""):
     # defining the model
     if model_name == "":
@@ -497,7 +496,6 @@ def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0,testin
         saver.restore(sess, load_name)
 
         mnist = fetch_openml('mnist_784', version=1, cache=True)
-        a = mnist.data.reshape((-1, 28, 28, 1))[0]
 
         X_vec = np.stack([gray2rgb(iimg) for iimg in mnist.data.reshape((-1, 28, 28))], 0)
         y_vec = mnist.target.astype(np.uint8)
@@ -530,7 +528,7 @@ def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0,testin
             return float(len(predication_res) / len(x))
 
         sample_index = np.random.choice(len(X_vec), testing_num)
-        test_x = X_vec[np.array(sample_index)]
+        test_x = X_vec[np.array(sample_index)] /255.0
         test_labels = y_vec[np.array(sample_index)]
 
         '''
@@ -556,26 +554,26 @@ def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0,testin
 
 def train_orig():
     orig_model_save = "./saved_models/orig_model.ckpt"
+    tf.reset_default_graph()
+    with tf.Session() as sess:  # Create new session
+        sess.run(tf.global_variables_initializer())
     if not path.exists(orig_model_save + ".meta"):
-        tf.reset_default_graph()
-        with tf.Session() as sess:  # Create new session
-            sess.run(tf.global_variables_initializer())
         train_bcnn(mnist_conv, save=True, save_name=orig_model_save)
-    load_and_test(orig_model_save, model='orig')
+    find_accuracy(orig_model_save, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
 
 
 # load_and_explain(orig_model_save)
 # load_and_explain(orig_model_save, model='uniform', minimum=0, maximum=1)
 
 def train_gaussian(noise_sigma):
-    gaussian_model_1 = "./saved_models/gaussian_{}_model.ckpt".format(str(noise_sigma))
+    gaussian_model_1 = "./saved_models_gaussian_{}/gaussian_{}_model.ckpt".format(str(noise_sigma), str(noise_sigma))
     print("before running gaussian")
+    tf.reset_default_graph()
+    with tf.Session() as sess:  # Create new session
+        sess.run(tf.global_variables_initializer())
     if not path.exists(gaussian_model_1 + ".meta"):
-        tf.reset_default_graph()
-        with tf.Session() as sess:  # Create new session
-            sess.run(tf.global_variables_initializer())
         train_bcnn(mnist_conv, save=True, save_name=gaussian_model_1, model='gaussian', sigma=noise_sigma)
-    load_and_test(gaussian_model_1, model='gaussian')
+    find_accuracy(gaussian_model_1, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
 
 
 # load_and_explain(gaussian_model_1, model='gaussian', sigma=noise_sigma)
@@ -583,14 +581,14 @@ def train_gaussian(noise_sigma):
 
 
 def train_uniform(max):
-    uniform_model_1 = "./saved_models/uniform_{}_model.ckpt".format(str(max))
+    uniform_model_1 = "./saved_models_uniform_{}/uniform_{}_model.ckpt".format(str(max), str(max))
     print("before running uniform")
+    tf.reset_default_graph()
+    with tf.Session() as sess:  # Create new session
+        sess.run(tf.global_variables_initializer())
     if not path.exists(uniform_model_1 + ".meta"):
-        tf.reset_default_graph()
-        with tf.Session() as sess:  # Create new session
-            sess.run(tf.global_variables_initializer())
         train_bcnn(mnist_conv, save=True, save_name=uniform_model_1, model='uniform', max_noise=max)
-    load_and_test(uniform_model_1, model='uniform')
+    find_accuracy(uniform_model_1, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
 
 
 # load_and_explain(uniform_model_1, model='uniform', minimum=0, maximum=max)
@@ -612,45 +610,14 @@ if __name__ == '__main__':
     # plt.imshow(one_image, cmap='gist_gray')
     # print('Image label: {}'.format(np.argmax(mnist_conv_onehot.train.labels[img_no])))
 
-    #train_orig()
+    train_orig()
 
-    for sigma in [0.1]:
+    for sigma in sigmas:
         train_gaussian(sigma)
 
     for max in maxs:
         train_uniform(max)
     exit()
-    '''
-    train_orig = False
-
-    orig_model_save = "./saved_models/orig_model.ckpt"
-    if train_orig:
-        train_bcnn(mnist_conv, save=False, save_name=orig_model_save)
-
-    # load_and_explain(orig_model_save)
-
-    sigmas = [0.001, 0.1, 0.5, 0.9]
-    train_gaussian = False
-    if train_gaussian:
-        for s in sigmas:
-            gaussian_model_1 = "./saved_models/orig_gaussian_" + str(s) + "_model.ckpt"
-            print("before running gaussian")
-            train_bcnn(mnist_conv, s, save=True, save_name=gaussian_model_1, model='gaussian')
-    # load_and_explain(gaussian_model_1, model='gaussian', sigma=0.1)
-
-    train_uniform = True
-    maximum = [0.001, 0.1, 0.5, 0.9]
-
-    if train_uniform:
-        for m in maximum:
-            uniform_model_1 = "./saved_models/uniform_" + str(m) + "_model.ckpt"
-            print("before running uniform")
-            train_bcnn(mnist_conv, min_noise=0, max_noise=m, save=True, save_name=uniform_model_1, model='uniform')
-# load_and_explain(uniform_model_1, model='uniform', minimum=0, maximum=0.01)
-# train_bcnn(mnist_conv, max_step=500, load=True, load_name=orig_model_save)
-
-# find_accuracy(orig_model_save, mnist_conv.validation.next_batch(mnist_conv.validation.num_examples))
-'''
 
 
 
