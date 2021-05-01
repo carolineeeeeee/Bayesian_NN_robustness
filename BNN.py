@@ -523,11 +523,17 @@ def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0, testi
 
             return logit_results
 
-        def extact_result(x, labels, noise):
+        def extact_result(x, labels, noise):    
             distribution_results = predict_wrap(x, noise)
             comparsion = lambda x, y: x == y
             predictions = comparsion(distribution_results, labels)
             predication_res = predictions[predictions == True]
+            wrong_pred_index = [i for i in range(len(x)) if not predictions]
+            print(noise)
+            print(wrong_pred_index)
+            for i in wrong_pred_index:
+                plt.imshow(x[i])
+                plt.savefig('orig_misdetection_' + str(i) + '.png')
             return float(len(predication_res) / len(x))
 
         sample_index = np.random.choice(len(X_vec), testing_num)
@@ -543,7 +549,7 @@ def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0, testi
                 noise = noise.reshape(testing_num, 28, 28, 1)
                 test_accuracy = extact_result(test_x, test_labels, noise)
                 f.write("Accuracy gaussian with sigma {}: {}\n".format(str(t_sigma), str(test_accuracy)))
-
+            exit()
             for t_max in maxs:
                 noise = np.random.uniform(low=minimum, high=t_max, size=(testing_num, 28, 28, 1))
                 noise = noise.reshape(testing_num, 28, 28, 1)
@@ -612,7 +618,9 @@ if __name__ == '__main__':
     # exit()
     # plt.imshow(one_image, cmap='gist_gray')
     # print('Image label: {}'.format(np.argmax(mnist_conv_onehot.train.labels[img_no])))
-
+    #load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, minimum=0, maximum=1):
+    load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0, testing_num=1000, model_name=""):
+    exit()
     train_orig()
 
     for sigma in sigmas:
