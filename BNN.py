@@ -52,8 +52,8 @@ import pickle
 # viz_steps = 500 #frequency at which save visualizations.
 # num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
-sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]
-maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 1]
+sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.1, 0.2, 0.3]
+maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
 
 # code credit: https://medium.com/python-experiments/bayesian-cnn-model-on-mnist-data-using-tensorflow-probability-compared-to-cnn-82d56a298f45
@@ -429,28 +429,31 @@ def find_accuracy(load_name, validation_set, learning_rate=0.001, minimum=0):
             saver.restore(sess, load_name)
 
             # orig accuracy
-            logits_orig = sess.run(logits, feed_dict={images: validation_images, hold_prob: 0.5})
-            predictions_orig = sess.run(tf.argmax(logits_orig, axis=1))
+            loss, predictions_orig = sess.run([elbo_loss, tf.argmax(logits, axis=1)],
+                                               feed_dict={images: validation_images, labels: validation_labels,
+                                                          hold_prob: 0.5})
             test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_orig)
-            f.write("Accuracy origin: {}\n".format(str(test_accuracy)))
+            f.write("Accuracy and loss origin: {} {}\n".format(str(test_accuracy), str(loss)))
 
             # gaussian accuracy
             for t_sigma in sigmas:
                 GaussianNoise = tf.keras.layers.GaussianNoise(t_sigma)
                 noisy_images = sess.run(GaussianNoise(validation_images))
-                logits_gauss = sess.run(logits, feed_dict={images: noisy_images, hold_prob: 0.5})
-                predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
+                loss, predictions_gauss = sess.run([elbo_loss, tf.argmax(logits, axis=1)], feed_dict={images: noisy_images, labels: validation_labels,
+                                                                                                      hold_prob: 0.5})
+                #predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
                 test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
-                f.write("Accuracy gaussian with sigma {}: {}\n".format(str(t_sigma), str(test_accuracy)))
+                f.write("Accuracy and loss gaussian with sigma {} : {} {}\n".format(str(t_sigma), str(test_accuracy),  str(loss)))
 
             # uniform accuracy
             for t_max in maxs:
-                UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, t_max))
-                noisy_images = sess.run(UniformNoise(validation_images))
-                logits_gauss = sess.run(logits, feed_dict={images: noisy_images, hold_prob: 0.5})
-                predictions_gauss = sess.run(tf.argmax(logits_gauss, axis=1))
-                test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_gauss)
-                f.write("Accuracy uniform with max {}: {}\n".format(str(t_max), str(test_accuracy)))
+                #UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, t_max))
+                noisy_images = validation_images + np.random.uniform(low=minimum, high=t_max, size=(len(validation_images), 28, 28, 1))
+                loss, predictions_uniform = sess.run([elbo_loss, tf.argmax(logits, axis=1)],
+                                                   feed_dict={images: noisy_images, labels: validation_labels,
+                                                              hold_prob: 0.5})
+                test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_uniform)
+                f.write("Accuracy and loss uniform with max {}: {} {}\n".format(str(t_max), str(test_accuracy), str(loss)))
     return 0
 
 
@@ -618,7 +621,6 @@ if __name__ == '__main__':
     for max in maxs:
         train_uniform(max)
     exit()
-
 
 
 
