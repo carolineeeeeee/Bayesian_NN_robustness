@@ -1,0 +1,39 @@
+Accuracy and loss origin: 0.9436 53.983875
+Accuracy and loss uniform with blur sigma 1: 0.8996 54.16239
+Accuracy and loss uniform with blur sigma 2: 0.221 55.92284
+Accuracy and loss uniform with blur sigma 3: 0.1122 56.29562
+Accuracy and loss uniform with blur sigma 4: 0.1048 56.340977
+Accuracy and loss uniform with blur sigma 5: 0.0878 56.35983
+Accuracy and loss uniform with blur sigma 6: 0.0922 56.464634
+Accuracy and loss gaussian with sigma 0.01 : 0.9298 54.01977
+Accuracy and loss gaussian with sigma 0.02 : 0.9178 54.057816
+Accuracy and loss gaussian with sigma 0.03 : 0.922 54.04126
+Accuracy and loss gaussian with sigma 0.04 : 0.9248 54.03997
+Accuracy and loss gaussian with sigma 0.05 : 0.8966 54.131
+Accuracy and loss gaussian with sigma 0.06 : 0.9046 54.087395
+Accuracy and loss gaussian with sigma 0.07 : 0.9456 53.97919
+Accuracy and loss gaussian with sigma 0.1 : 0.9252 54.036125
+Accuracy and loss gaussian with sigma 0.2 : 0.9298 54.0249
+Accuracy and loss gaussian with sigma 0.3 : 0.9272 54.04464
+Accuracy and loss uniform with max 0.01: 0.9494 53.97591
+Accuracy and loss uniform with max 0.05: 0.9414 53.997616
+Accuracy and loss uniform with max 0.1: 0.9278 54.029747
+Accuracy and loss uniform with max 0.2: 0.9436 53.986
+Accuracy and loss uniform with max 0.3: 0.9448 53.984398
+Accuracy and loss uniform with max 0.4: 0.9496 53.973522
+Accuracy and loss uniform with max 0.5: 0.956 53.951412
+Accuracy and loss uniform with max 0.6: 0.946 53.97833
+Accuracy and loss uniform with max 0.7: 0.9498 53.97292
+Accuracy and loss uniform with max 0.8: 0.9464 53.97983
+Accuracy and loss uniform with max 0.9: 0.9356 54.035297
+Accuracy and loss uniform with max 1: 0.9282 54.029198
+Accuracy and loss uniform with combined sigma 0.01 max 0.01: 0.9196 54.046696
+Accuracy and loss uniform with combined sigma 0.02 max 0.05: 0.9214 54.051304
+Accuracy and loss uniform with combined sigma 0.03 max 0.1: 0.942 53.988533
+Accuracy and loss uniform with combined sigma 0.04 max 0.2: 0.9222 54.05534
+Accuracy and loss uniform with combined sigma 0.05 max 0.3: 0.954 53.966183
+Accuracy and loss uniform with combined sigma 0.06 max 0.4: 0.939 53.994354
+Accuracy and loss uniform with combined sigma 0.07 max 0.5: 0.9456 53.978188
+Accuracy and loss uniform with combined sigma 0.1 max 0.6: 0.9528 53.95936
+Accuracy and loss uniform with combined sigma 0.2 max 0.7: 0.9532 53.965137
+Accuracy and loss uniform with combined sigma 0.3 max 0.8: 0.9544 53.958607
