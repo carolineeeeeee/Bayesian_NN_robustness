@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from skimage.color import gray2rgb, rgb2gray, label2rgb  # since the code wants color images
 from sklearn.datasets import fetch_openml
 import sklearn
+from scipy.ndimage import gaussian_filter
 
 import os, sys
 
@@ -52,7 +53,7 @@ import pickle
 # viz_steps = 500 #frequency at which save visualizations.
 # num_monte_carlo = 50 #Network draws to compute predictive probabilities.
 
-sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.1, 0.2, 0.3]
+sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.1, 0.2, 0.3, 0.5, 1]
 maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 
 
@@ -106,19 +107,19 @@ def train_bcnn(mnist_conv, learning_rate=0.001, max_step=3000, batch_size=50, lo
         #define noise
         GaussianNoise = tf.keras.layers.GaussianNoise(sigma)
         UniformNoise = tf.keras.layers.Lambda(lambda x: x + random.uniform(min_noise, max_noise))
-        g_noise = np.random.normal(0, sigma, (batch_size, 28, 28, 1))
-        g_noise = g_noise.reshape(batch_size, 28, 28, 1)
-        u_noise = np.random.uniform(low=min_noise, high=max_noise, size=(batch_size, 28, 28, 1))
-        u_noise = u_noise.reshape(batch_size, 28, 28, 1)
         for step in range(max_step + 1):
             images_b, labels_b = mnist_conv.train.next_batch(
                 batch_size)
             #images_h, labels_h = mnist_conv.validation.next_batch(
             #    mnist_conv.validation.num_examples)
             if model == 'gaussian':
+                g_noise = np.random.normal(0, sigma, (batch_size, 28, 28, 1))
+                g_noise = g_noise.reshape(batch_size, 28, 28, 1)
                 images_b = images_b+ g_noise
                 #images_h = sess.run(GaussianNoise(images_h))
             elif model == 'uniform':
+                u_noise = np.random.uniform(low=min_noise, high=max_noise, size=(batch_size, 28, 28, 1))
+                u_noise = u_noise.reshape(batch_size, 28, 28, 1)
                 images_b = images_b + u_noise
                 #images_h = sess.run(UniformNoise(images_h))
             else:
@@ -143,145 +144,6 @@ def train_bcnn(mnist_conv, learning_rate=0.001, max_step=3000, batch_size=50, lo
         # print(neural_net.predict(images_b))
         pred_results = sess.run(logits, feed_dict={images: images_b, hold_prob: 0.5})
 
-
-# print(pred_results)
-'''
-def train_uniform_noise(mnist_conv, minimum, maximum, learning_rate=0.001, max_step=5000, batch_size=50, load=False, load_name='', save=False, save_name=''):
-	if load and load_name=='':
-		print("missing load_name")
-		exit()
-	if save and save_name == '':
-		print("missing save_name")
-		exit()
-
-	# defining the model
-	images = tf.compat.v1.placeholder(tf.float32,shape=[None,28,28,1])
-	labels = tf.compat.v1.placeholder(tf.float32,shape=[None,])
-	hold_prob = tf.compat.v1.placeholder(tf.float32)
-	# define the model
-	neural_net = tf.keras.Sequential([
-		tf.keras.layers.Lambda(lambda x: x + random.uniform(minimum, maximum)),
-		tfp.layers.Convolution2DReparameterization(32, kernel_size=5,  padding="SAME", activation=tf.nn.relu),
-		tf.keras.layers.MaxPooling2D(pool_size=[2, 2],  strides=[2, 2],  padding="SAME"),
-		tfp.layers.Convolution2DReparameterization(64, kernel_size=5,  padding="SAME",  activation=tf.nn.relu),
-		tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-		tf.keras.layers.Flatten(),
-		tfp.layers.DenseFlipout(1024, activation=tf.nn.relu),
-		tf.keras.layers.Dropout(hold_prob),
-		tfp.layers.DenseFlipout(10)])
-	logits = neural_net(images)
-	# Compute the -ELBO as the loss, averaged over the batch size.
-	labels_distribution = tfp.distributions.Categorical(logits=logits)
-	neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labels))
-	kl = sum(neural_net.losses) / mnist_conv.train.num_examples
-	elbo_loss = neg_log_likelihood + kl
-	optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
-	train_op = optimizer.minimize(elbo_loss)
-	# Build metrics for evaluation. Predictions are formed from a single forward
-	# pass of the probabilistic layers. They are cheap but noisy predictions.
-	predictions = tf.argmax(logits, axis=1)
-	accuracy, accuracy_update_op = tf.compat.v1.metrics.accuracy(labels=labels, predictions=predictions)
-
-
-	# training
-	init_op = tf.group(tf.compat.v1.global_variables_initializer(),
-						tf.compat.v1.local_variables_initializer())
-
-	saver = tf.compat.v1.train.Saver()
-	with tf.compat.v1.Session() as sess:
-		sess.run(init_op)
-		if load:
-			saver = tf.compat.v1.train.import_meta_graph(load_name+'.meta')
-			saver.restore(sess, load_name)
-	# Run the training loop.
-		for step in range(max_step+1):
-			images_b, labels_b = mnist_conv.train.next_batch(
-	batch_size)
-			images_h, labels_h = mnist_conv.validation.next_batch(
-	mnist_conv.validation.num_examples)
-
-			_ = sess.run([train_op, accuracy_update_op], feed_dict={
-					images: images_b,labels: labels_b,hold_prob:0.5})
-			if (step==0) | (step % 500 == 0):
-				loss_value, accuracy_value = sess.run([elbo_loss, accuracy], feed_dict={images: images_b,
-	labels: labels_b,hold_prob:0.5})
-
-				print("Step: {:>3d} Loss: {:.3f} Accuracy: {:.3f}".format(step, loss_value, accuracy_value))
-	#neural_net.save("train_orig")
-		if save:
-			save_path = saver.save(sess, save_name)
-			print("Model saved in file: %s" % save_path)
-	return 0
-
-def train_gaussian_noise(mnist_conv, sigma, learning_rate=0.001, max_step=5000, batch_size=50, load=False, load_name='', save=False, save_name=''):
-	if load and load_name=='':
-		print("missing load_name")
-		exit()
-	if save and save_name == '':
-		print("missing save_name")
-		exit()
-
-	# defining the model
-	images = tf.compat.v1.placeholder(tf.float32,shape=[None,28,28,1])
-	labels = tf.compat.v1.placeholder(tf.float32,shape=[None,])
-	hold_prob = tf.compat.v1.placeholder(tf.float32)
-	# define the model
-	neural_net = tf.keras.Sequential([
-		tf.keras.layers.GaussianNoise(sigma),
-		tfp.layers.Convolution2DReparameterization(32, kernel_size=5,  padding="SAME", activation=tf.nn.relu),
-		tf.keras.layers.MaxPooling2D(pool_size=[2, 2],  strides=[2, 2],  padding="SAME"),
-		tfp.layers.Convolution2DReparameterization(64, kernel_size=5,  padding="SAME",  activation=tf.nn.relu),
-		tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-		tf.keras.layers.Flatten(),
-		tfp.layers.DenseFlipout(1024, activation=tf.nn.relu),
-		tf.keras.layers.Dropout(hold_prob),
-		tfp.layers.DenseFlipout(10)])
-	logits = neural_net(images)
-	# Compute the -ELBO as the loss, averaged over the batch size.
-	labels_distribution = tfp.distributions.Categorical(logits=logits)
-	neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labels))
-	kl = sum(neural_net.losses) / mnist_conv.train.num_examples
-	elbo_loss = neg_log_likelihood + kl
-	optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
-	train_op = optimizer.minimize(elbo_loss)
-	# Build metrics for evaluation. Predictions are formed from a single forward
-	# pass of the probabilistic layers. They are cheap but noisy predictions.
-	predictions = tf.argmax(logits, axis=1)
-	accuracy, accuracy_update_op = tf.compat.v1.metrics.accuracy(labels=labels, predictions=predictions)
-
-
-	print("before training")
-	# training
-	init_op = tf.group(tf.compat.v1.global_variables_initializer(),
-						tf.compat.v1.local_variables_initializer())
-
-	saver = tf.compat.v1.train.Saver()
-	with tf.compat.v1.Session() as sess:
-		sess.run(init_op)
-		if load:
-			saver = tf.compat.v1.train.import_meta_graph(load_name+'.meta')
-			saver.restore(sess, load_name)
-	# Run the training loop.
-		print("before loop")
-		for step in range(max_step+1):
-			images_b, labels_b = mnist_conv.train.next_batch(
-	batch_size)
-			images_h, labels_h = mnist_conv.validation.next_batch(
-	mnist_conv.validation.num_examples)
-
-			_ = sess.run([train_op, accuracy_update_op], feed_dict={
-					images: images_b,labels: labels_b,hold_prob:0.5})
-			if (step==0) | (step % 500 == 0):
-				loss_value, accuracy_value = sess.run([elbo_loss, accuracy], feed_dict={images: images_b,
-	labels: labels_b,hold_prob:0.5})
-
-				print("Step: {:>3d} Loss: {:.3f} Accuracy: {:.3f}".format(step, loss_value, accuracy_value))
-	#neural_net.save("train_orig")
-		if save:
-			save_path = saver.save(sess, save_name)
-			print("Model saved in file: %s" % save_path)
-	return 0
-'''
 
 
 def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, minimum=0, maximum=1):
@@ -390,6 +252,9 @@ def load_and_explain(load_name, learning_rate=0.001, model='orig', sigma=0.1, mi
 def find_accuracy(load_name, validation_set, learning_rate=0.001, minimum=0):
     # print(validation_set.shape)
     # defining the model
+    tf.reset_default_graph()
+    with tf.Session() as sess:  # Create new session
+        sess.run(tf.global_variables_initializer())
     images = tf.compat.v1.placeholder(tf.float32, shape=[None, 28, 28, 1])
     labels = tf.compat.v1.placeholder(tf.float32, shape=[None, ])
     hold_prob = tf.compat.v1.placeholder(tf.float32)
@@ -435,6 +300,19 @@ def find_accuracy(load_name, validation_set, learning_rate=0.001, minimum=0):
             test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_orig)
             f.write("Accuracy and loss origin: {} {}\n".format(str(test_accuracy), str(loss)))
 
+            '''
+            # gaussian blur
+            for blur_simga in [0.5, 0.8, 1.2, 1.5, 1.8, 2.1]:
+                noisy_images = np.array([gaussian_filter(validation_image, blur_simga) for validation_image in validation_images])
+                loss, predictions_blur = sess.run([elbo_loss, tf.argmax(logits, axis=1)],
+                                                     feed_dict={images: noisy_images, labels: validation_labels,
+                                                                hold_prob: 0.5})
+                test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_blur)
+                f.write(
+                    "Accuracy and loss uniform with blur sigma {}: {} {}\n".format(str(blur_simga), str(test_accuracy), str(loss)))
+            '''
+
+
             # gaussian accuracy
             for t_sigma in sigmas:
                 GaussianNoise = tf.keras.layers.GaussianNoise(t_sigma)
@@ -454,6 +332,20 @@ def find_accuracy(load_name, validation_set, learning_rate=0.001, minimum=0):
                                                               hold_prob: 0.5})
                 test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_uniform)
                 f.write("Accuracy and loss uniform with max {}: {} {}\n".format(str(t_max), str(test_accuracy), str(loss)))
+
+
+            #combination noise
+            for t_sigma, t_max in zip(sigmas, maxs):
+                GaussianNoise = tf.keras.layers.GaussianNoise(t_sigma)
+                noisy_images = sess.run(GaussianNoise(validation_images))
+                noisy_images = noisy_images + np.random.uniform(low=minimum, high=t_max,
+                                                                     size=(len(validation_images), 28, 28, 1))
+                loss, predictions_cobo = sess.run([elbo_loss, tf.argmax(logits, axis=1)],
+                                                     feed_dict={images: noisy_images, labels: validation_labels,
+                                                                hold_prob: 0.5})
+                test_accuracy = sklearn.metrics.accuracy_score(validation_labels, predictions_cobo)
+                f.write(
+                    "Accuracy and loss uniform with combined sigma {} max {}: {} {}\n".format(str(t_sigma), str(t_max), str(test_accuracy), str(loss)))
     return 0
 
 
@@ -535,8 +427,8 @@ def load_and_test(load_name, learning_rate=0.001, model='orig', minimum=0, testi
         test_labels = y_vec[np.array(sample_index)]
 
         '''
-		test for gaussian 
-		'''
+                test for gaussian
+                '''
         with open("{}_test".format(load_name), 'w+') as f:
             for t_sigma in sigmas:
                 noise = np.random.normal(0, t_sigma, (testing_num, 28, 28, 1))
@@ -613,14 +505,16 @@ if __name__ == '__main__':
     # plt.imshow(one_image, cmap='gist_gray')
     # print('Image label: {}'.format(np.argmax(mnist_conv_onehot.train.labels[img_no])))
 
+    #sigmas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.1, 0.2, 0.3]
+    #maxs = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     train_orig()
-
+    #train_gaussian()
+    #train_uniform(1)
     for sigma in sigmas:
-        train_gaussian(sigma)
+       train_gaussian(sigma)
 
     for max in maxs:
         train_uniform(max)
     exit()
-
 
 
